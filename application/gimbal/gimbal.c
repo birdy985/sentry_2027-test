@@ -15,6 +15,9 @@ static Gimbal_Upload_Data_s gimbal_feedback_data; // 回传给cmd的云台状态
 static Gimbal_Ctrl_Cmd_s gimbal_cmd_recv;         // 来自cmd的控制信息
 
 static BMI088Instance *bmi088; // 云台IMU
+
+float pid_gimbal_set[2];//pid双轴目标值
+
 void GimbalInit()
 {   
     gimba_IMU_data = INS_Init(); // IMU先初始化,获取姿态数据指针赋给yaw电机的其他数据来源
@@ -26,21 +29,24 @@ void GimbalInit()
         },
         .controller_param_init_config = {
             .angle_PID = {
-                .Kp = 8, // 8
+                .Kp = 0.95, // 1
                 .Ki = 0,
-                .Kd = 0,
+                .Kd = 0.015,//0.015
                 .DeadBand = 0.1,
-                .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
+                .Derivative_LPF_RC = 0.00808,// 1 / 2 * pai * fc(一阶低通滤波计算RC) 0.00508位置环D微分项的带宽是20Hz
+                .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement | PID_DerivativeFilter,
                 .IntegralLimit = 100,
 
                 .MaxOut = 500,
             },
             .speed_PID = {
-                .Kp = 4000,  // 50
-                .Ki = 4500, // 200
+                .Kp = 7500,  // 7500
+                .Ki = 3000, // 3000
                 .Kd = 0,
+                .CoefA = 0.4,
+                .CoefB = 0.3,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-                .IntegralLimit = 3000,
+                .IntegralLimit = 3500,
                 .MaxOut = 20000,
             },
             .other_angle_feedback_ptr = &gimba_IMU_data->YawTotalAngle,
@@ -50,9 +56,10 @@ void GimbalInit()
         .controller_setting_init_config = {
             .angle_feedback_source = OTHER_FEED,
             .speed_feedback_source = OTHER_FEED,
-            .outer_loop_type = SPEED_LOOP,
-            // .close_loop_type = ANGLE_LOOP | SPEED_LOOP,
-            .close_loop_type =  SPEED_LOOP,
+            .outer_loop_type = ANGLE_LOOP,
+            .close_loop_type = ANGLE_LOOP | SPEED_LOOP,
+            /* 速度环调试使用 */
+            // .close_loop_type =  SPEED_LOOP,
             .motor_reverse_flag = MOTOR_DIRECTION_NORMAL,
         },
         .motor_type = GM6020};
@@ -72,11 +79,11 @@ void GimbalInit()
                 .MaxOut = 500,
             },
             .speed_PID = {
-                .Kp = 4500,  // 50
+                .Kp = 5000,  // 50
                 .Ki = 5000, // 350
                 .Kd = 0,   // 0
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-                .IntegralLimit = 2500,
+                .IntegralLimit = 3000,
                 .MaxOut = 20000,
             },
             .other_angle_feedback_ptr = &gimba_IMU_data->Pitch,
@@ -86,9 +93,9 @@ void GimbalInit()
         .controller_setting_init_config = {
             .angle_feedback_source = OTHER_FEED,
             .speed_feedback_source = OTHER_FEED,
-            .outer_loop_type = SPEED_LOOP,
-            // .close_loop_type = SPEED_LOOP | ANGLE_LOOP,
-            .close_loop_type = SPEED_LOOP,            
+            .outer_loop_type = ANGLE_LOOP,
+            .close_loop_type = SPEED_LOOP | ANGLE_LOOP,
+            // .close_loop_type = SPEED_LOOP,            
             .motor_reverse_flag = MOTOR_DIRECTION_NORMAL,
         },
         .motor_type = GM6020,
@@ -125,8 +132,10 @@ void GimbalTask()
         DJIMotorChangeFeed(yaw_motor, SPEED_LOOP, OTHER_FEED);
         DJIMotorChangeFeed(pitch_motor, ANGLE_LOOP, OTHER_FEED);
         DJIMotorChangeFeed(pitch_motor, SPEED_LOOP, OTHER_FEED);
+        // DJIMotorSetRef(yaw_motor, pid_gimbal_set[0]); // yaw和pitch会在robot_cmd中处理好多圈和单圈
+        // DJIMotorSetRef(pitch_motor, pid_gimbal_set[1]);
         DJIMotorSetRef(yaw_motor, gimbal_cmd_recv.yaw); // yaw和pitch会在robot_cmd中处理好多圈和单圈
-        DJIMotorSetRef(pitch_motor, gimbal_cmd_recv.pitch);
+        // DJIMotorSetRef(pitch_motor, gimbal_cmd_recv.pitch);        
         break;
     // 云台自由模式,使用编码器反馈,底盘和云台分离,仅云台旋转,一般用于调整云台姿态(英雄吊射等)/能量机关
     case GIMBAL_FREE_MODE: // 后续删除,或加入云台追地盘的跟随模式(响应速度更快)
@@ -136,8 +145,8 @@ void GimbalTask()
         DJIMotorChangeFeed(yaw_motor, SPEED_LOOP, OTHER_FEED);
         DJIMotorChangeFeed(pitch_motor, ANGLE_LOOP, OTHER_FEED);
         DJIMotorChangeFeed(pitch_motor, SPEED_LOOP, OTHER_FEED);
-        DJIMotorSetRef(yaw_motor, gimbal_cmd_recv.yaw); // yaw和pitch会在robot_cmd中处理好多圈和单圈
-        DJIMotorSetRef(pitch_motor, gimbal_cmd_recv.pitch);
+        // DJIMotorSetRef(yaw_motor, gimbal_cmd_recv.yaw); // yaw和pitch会在robot_cmd中处理好多圈和单圈
+        // DJIMotorSetRef(pitch_motor, gimbal_cmd_recv.pitch);
         break;
     default:
         break;
