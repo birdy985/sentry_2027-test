@@ -18,7 +18,7 @@ static BMI088Instance *bmi088; // 云台IMU
 
 float pid_gimbal_set[2];//pid双轴目标值
 
-float PitchGravity_param = 9.0;
+float PitchGravity_param = 10.0;
 float PitchGravity_val;
 
 float resistance_feedforword;
@@ -117,10 +117,11 @@ void GimbalInit()
                 .CoefA = 0.4,
                 .CoefB = 0.3,
                 .Derivative_LPF_RC = 0.00808,// 1 / 2 * pai * fc(一阶低通滤波计算RC) 0.00508位置环D微分项的带宽是20Hz
-                .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement | PID_DerivativeFilter | PID_ChangingIntegrationRate,
+                .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement | PID_ChangingIntegrationRate | PID_DerivativeFilter,
                 .IntegralLimit = 100,
                 .MaxOut = 500,
             },
+            // 
             .speed_PID = {
                 .Kp = 1000,  // 1000
                 .Ki = 3000, // 3000
@@ -157,9 +158,9 @@ void GimbalInit()
         },
         .controller_param_init_config = {
             .angle_PID = {
-                .Kp = 2.5, // 2.5
+                .Kp = 5.0, // 2.5
                 .Ki = 0,
-                .Kd = 0,
+                .Kd = 0.05,
                 .CoefA = 0.5,
                 .CoefB = 0.3,
                 .Derivative_LPF_RC = 0.00808,
@@ -169,7 +170,7 @@ void GimbalInit()
                 .DeadBand = 0.1,
             },
             .speed_PID = {
-                .Kp = 5000,  // 5000
+                .Kp = 2000,  // 5000
                 .Ki = 6000, // 6000
                 .Kd = 0,   // 0
                 .CoefA = 0.5,
@@ -189,7 +190,7 @@ void GimbalInit()
             .angle_feedback_source = OTHER_FEED,
             .speed_feedback_source = OTHER_FEED,
             .outer_loop_type = ANGLE_LOOP,
-            .close_loop_type = SPEED_LOOP | ANGLE_LOOP,         
+            .close_loop_type = ANGLE_LOOP | SPEED_LOOP,         
             .motor_reverse_flag = MOTOR_DIRECTION_NORMAL,
             .feedforward_flag = CURRENT_FEEDFORWARD,
         },

@@ -56,6 +56,8 @@ static DJIMotorInstance *motor_lf, *motor_rf, *motor_lb, *motor_rb; // left righ
 static float chassis_vx, chassis_vy;                      // 将云台系的速度投影到底盘
 static float vt_lf, vt_rf, vt_lb, vt_rb;                  // 底盘速度解算后的临时输出,待进行限幅
 
+float floaw_coefficient = 0.05f;
+
 void ChassisInit()
 {
     // 四个轮子的参数一样,改tx_id和反转标志位即可
@@ -77,6 +79,8 @@ void ChassisInit()
             .speed_feedback_source = MOTOR_FEED,
             .outer_loop_type = SPEED_LOOP, // 设置为开环，电机设定值由下面的功率控制设定，不走普通的pid
             .close_loop_type = SPEED_LOOP,
+            // .outer_loop_type = OPEN_LOOP, // 设置为开环，电机设定值由下面的功率控制设定，不走普通的pid
+            // .close_loop_type = OPEN_LOOP,            
         },
         .motor_type = M3508,
     };
@@ -86,11 +90,11 @@ void ChassisInit()
     chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
     motor_lf = PowerControlInit(&chassis_motor_config);
 
-    chassis_motor_config.can_init_config.tx_id = 2;
+    chassis_motor_config.can_init_config.tx_id = 4;
     chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
     motor_rf = PowerControlInit(&chassis_motor_config);
 
-    chassis_motor_config.can_init_config.tx_id = 4;
+    chassis_motor_config.can_init_config.tx_id = 2;
     chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
     motor_lb = PowerControlInit(&chassis_motor_config);
 
@@ -150,10 +154,15 @@ void ChassisInit()
  */
 static void MecanumCalculate()
 {
-    vt_lf = -chassis_vx - chassis_vy - chassis_cmd_recv.wz * LF_CENTER;
-    vt_rf = -chassis_vx + chassis_vy - chassis_cmd_recv.wz * RF_CENTER;
-    vt_lb = chassis_vx - chassis_vy - chassis_cmd_recv.wz * LB_CENTER;
-    vt_rb = chassis_vx + chassis_vy - chassis_cmd_recv.wz * RB_CENTER;
+    vt_lf = chassis_vx + chassis_vy - chassis_cmd_recv.wz * LF_CENTER;
+    vt_rf = chassis_vx - chassis_vy - chassis_cmd_recv.wz * RF_CENTER;
+    vt_lb = -chassis_vx + chassis_vy - chassis_cmd_recv.wz * LB_CENTER;
+    vt_rb = -chassis_vx - chassis_vy - chassis_cmd_recv.wz * RB_CENTER;
+    // //俯视顺时针旋转
+    // vt_lf = 1000;
+    // vt_rf = 1000;
+    // vt_lb = 1000;
+    // vt_rb = 1000;    
 }
 
 /**
@@ -224,10 +233,11 @@ void ChassisTask()
         chassis_cmd_recv.wz = 0;
         break;
     case CHASSIS_FOLLOW_GIMBAL_YAW: // 跟随云台,不单独设置pid,以误差角度平方为速度输出
-        chassis_cmd_recv.wz = -1.5f * chassis_cmd_recv.offset_angle * abs(chassis_cmd_recv.offset_angle);
+        chassis_cmd_recv.wz = floaw_coefficient * chassis_cmd_recv.offset_angle * abs(chassis_cmd_recv.offset_angle);
+        // chassis_cmd_recv.wz = 0.0;
         break;
     case CHASSIS_ROTATE: // 自旋,同时保持全向机动;当前wz维持定值,后续增加不规则的变速策略
-        chassis_cmd_recv.wz = 4000;
+        chassis_cmd_recv.wz = 500;
         break;
     default:
         break;

@@ -138,12 +138,14 @@ static void CalcOffsetAngle()
     else
         chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE;
 #else // 小于180度
-    if (angle > YAW_ALIGN_ANGLE)
-        chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE;
-    else if (angle <= YAW_ALIGN_ANGLE && angle >= YAW_ALIGN_ANGLE - 180.0f)
-        chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE;
-    else
-        chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE + 360.0f;
+    float error = angle - YAW_ALIGN_ANGLE;    
+    while (error > 180.0f) {
+        error -= 360.0f;
+    }
+    while (error < -180.0f) {
+        error += 360.0f;
+    }
+    chassis_cmd_send.offset_angle = error;
 #endif
 }
 
@@ -161,8 +163,8 @@ static void RemoteControlSet()
     }
     else if (switch_is_mid(rc_data[TEMP].rc.switch_right)) // 右侧开关状态[中],底盘和云台分离,底盘保持不转动
     {
-        chassis_cmd_send.chassis_mode = CHASSIS_NO_FOLLOW;
-        gimbal_cmd_send.gimbal_mode = GIMBAL_FREE_MODE;
+        chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
+        gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
     }
 
     // 云台参数,确定云台控制数据
@@ -183,7 +185,7 @@ static void RemoteControlSet()
     if(gimbal_cmd_send.pitch <= -3.5f) gimbal_cmd_send.pitch = -3.5f;
     if(gimbal_cmd_send.pitch >= 13.0f) gimbal_cmd_send.pitch = 13.0f;
 
-    // 底盘参数,目前没有加入小陀螺(调试似乎暂时没有必要),系数需要调整
+    // 底盘参数,目前没有加入小陀螺(调试似乎暂时没有必要),系数需要调整 //添加两个负号
     chassis_cmd_send.vx = 10.0f * (float)rc_data[TEMP].rc.rocker_r_; // _水平方向
     chassis_cmd_send.vy = 10.0f * (float)rc_data[TEMP].rc.rocker_r1; // 1数值方向
 
@@ -213,11 +215,14 @@ static void RemoteControlSet()
  */
 static void MouseKeySet()
 {
-    chassis_cmd_send.vx = rc_data[TEMP].key[KEY_PRESS].w * 300 - rc_data[TEMP].key[KEY_PRESS].s * 300; // 系数待测
-    chassis_cmd_send.vy = rc_data[TEMP].key[KEY_PRESS].s * 300 - rc_data[TEMP].key[KEY_PRESS].d * 300;
+    chassis_cmd_send.vx = rc_data[TEMP].key[KEY_PRESS].a * 2000 - rc_data[TEMP].key[KEY_PRESS].d * 2000; // 系数待测
+    chassis_cmd_send.vy = rc_data[TEMP].key[KEY_PRESS].w * 2000 - rc_data[TEMP].key[KEY_PRESS].s* 2000;
 
-    gimbal_cmd_send.yaw += (float)rc_data[TEMP].mouse.x / 660 * 10; // 系数待测
-    gimbal_cmd_send.pitch += (float)rc_data[TEMP].mouse.y / 660 * 10;
+    gimbal_cmd_send.yaw -= (float)rc_data[TEMP].mouse.x / 660 * 8; // 系数待测a
+    gimbal_cmd_send.pitch += (float)rc_data[TEMP].mouse.y / 660 * 5;
+
+    if(gimbal_cmd_send.pitch <= -3.0f) gimbal_cmd_send.pitch = -3.0f;
+    if(gimbal_cmd_send.pitch >= 12.5f) gimbal_cmd_send.pitch = 12.5f;
 
     switch (rc_data[TEMP].key_count[KEY_PRESS][Key_Z] % 3) // Z键设置弹速
     {
@@ -282,11 +287,25 @@ static void MouseKeySet()
     switch (rc_data[TEMP].key[KEY_PRESS].shift) // 待添加 按shift允许超功率 消耗缓冲能量
     {
     case 1:
-
+        
         break;
 
     default:
 
+        break;
+    }
+    switch (rc_data[TEMP].key_count[KEY_PRESS][Key_Q] % 3) // Q键设置底盘运动模式
+    {
+    case 0:
+        // 初始状态(计数为0) 或 再次按下(计数为偶数) 时，为跟随云台模式
+        chassis_cmd_send.chassis_mode = CHASSIS_NO_FOLLOW; 
+        break;
+    case 1:
+        // 按下一次(计数为1) 或 计数为奇数时，开启小陀螺模式
+        chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
+        break;
+    case 2:
+        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
         break;
     }
 }
